@@ -1,7 +1,13 @@
 # Fantabot
 
 Italian group chat bot with a shared, authenticated Modal `/chat` endpoint.
-The first version uses GPT-4o-mini via OpenAI; no GPU is required. Existing
+The default model is **Qwen3 30B A3B Instruct 2507** via OpenRouter
+(`qwen/qwen3-30b-a3b-instruct-2507`); no GPU is required. It is a multilingual,
+non-reasoning model, so the reply allowance is not consumed by hidden reasoning.
+OpenRouter's catalog lists $0.10/million input tokens and $0.30/million output
+tokens (checked 2026-10-09). Italian chat quality still needs a live trial.
+The `openai` Python dependency is only the compatible client SDK; requests go to
+OpenRouter, and no OpenAI account or API key is required. Existing
 football scraping, news and voice scripts remain under `src/` and are not
 connected to chat yet. The bot explicitly does **not** claim live football data.
 
@@ -32,7 +38,8 @@ Create a new bot or rotate the token, then add the bot to the group.
 Create a local `.env` (ignored by Git) with:
 
 ```dotenv
-OPENAI_API_KEY=replace-me
+OPENROUTER_API_KEY=replace-me
+CHAT_MODEL=qwen/qwen3-30b-a3b-instruct-2507
 TELEGRAM_BOT_TOKEN=replace-me
 TELEGRAM_BOT_USERNAME=YourBotUsernameWithoutAt
 TELEGRAM_GROUP_ID=-1001234567890
@@ -40,8 +47,8 @@ CHAT_API_KEY=replace-with-a-long-random-secret
 TELEGRAM_WEBHOOK_SECRET=replace-with-a-different-random-secret
 MONTHLY_BUDGET_EUR=15
 EUR_PER_USD=1.10
-INPUT_USD_PER_MILLION=0.15
-OUTPUT_USD_PER_MILLION=0.60
+INPUT_USD_PER_MILLION=0.10
+OUTPUT_USD_PER_MILLION=0.30
 MAX_OUTPUT_TOKENS=512
 COOLDOWN_SECONDS=15
 ```
@@ -58,6 +65,23 @@ uv run modal deploy --strategy recreate -m fantabot.modal_app
 ```
 
 The deployment prints the base web URL. Register it as described below.
+
+### Updating an existing OpenAI-based deployment
+
+In your local `.env`, replace `OPENAI_API_KEY` with `OPENROUTER_API_KEY`, set
+`CHAT_MODEL=qwen/qwen3-30b-a3b-instruct-2507`, and change the input/output prices
+to `0.10` and `0.30`. Keep the Telegram token and both authentication secrets.
+Use your funded OpenRouter account's API key, ideally with a dedicated key limit.
+Then update the Modal secret and recreate the deployment:
+
+```sh
+uv run modal secret create fantabot-secrets --from-dotenv .env --force
+uv run modal deploy --strategy recreate -m fantabot.modal_app
+```
+
+If the endpoint URL is unchanged, you do not need to register the webhook again.
+The new chat deployment never reads an OpenAI key; old news/scraping scripts
+remain separate and still use their own original provider configuration.
 
 ### Telegram webhook
 
@@ -101,15 +125,20 @@ Treat the chat key as a trusted backend credential, not a browser/public client 
 
 - A default **€15/month model allowance** leaves a target €5 for Modal. This is
   **not a guaranteed €20 combined bill cap**: hosting, taxes, exchange rates and
-  provider price changes are outside application control. Set provider spend
-  limits where available and Modal billing alerts/limits separately.
+  provider price changes are outside application control. OpenRouter credit-purchase
+  fees are also separate from token usage. Set an OpenRouter key spending limit
+  and Modal billing alerts/limits separately.
 - Prices are configurable estimates, not live pricing. Verify current provider
   rates before deploying. `EUR_PER_USD=1.10` is a conservative conversion buffer,
   not a live exchange rate. When changing `CHAT_MODEL`, both token prices must
-  be explicitly configured. Models must support OpenAI text chat completions
-  and `max_completion_tokens`; test compatibility first.
+  be explicitly configured. Models must support OpenRouter text chat completions
+  and `max_tokens`; test compatibility and tokenizer bounds first. Requests cap
+  provider input/output prices at the configured rates and require parameter
+  support. If no provider fits, the call fails instead of exceeding the price cap.
+  Routing sorts by price and disables provider fallbacks; no automatic retries.
 - A reservation for the maximum estimated request cost is saved before inference.
-  Success reconciles against reported token usage; failures/uncertain calls retain
+  Success conservatively reconciles token usage at the configured price ceilings
+  (a cheaper routed provider may actually cost less); failures/uncertain calls retain
   the reservation. No automatic provider retries. Budget resets by UTC calendar
   month, not by restarting/deploying containers.
 - A single serial Modal worker owns SQLite on the `fantabot-state` volume. Requests

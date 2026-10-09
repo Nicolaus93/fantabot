@@ -8,7 +8,7 @@ from fantabot import chat, modal_app, state
 
 @pytest.fixture
 def local_worker(monkeypatch, tmp_path):
-    monkeypatch.setenv("OPENAI_API_KEY", "fake")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "fake")
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "123:fake")
     monkeypatch.setenv("TELEGRAM_BOT_USERNAME", "FantaBot")
     monkeypatch.setenv("TELEGRAM_GROUP_ID", "-100")
@@ -30,7 +30,7 @@ def local_worker(monkeypatch, tmp_path):
             return "Ciao!", (20, 3)
 
     monkeypatch.setattr(state, "State", local_state)
-    monkeypatch.setattr(chat, "OpenAIProvider", lambda api_key, settings: Provider())
+    monkeypatch.setattr(chat, "OpenRouterProvider", lambda api_key, settings: Provider())
     original_client = httpx.Client
 
     def deliver(request):

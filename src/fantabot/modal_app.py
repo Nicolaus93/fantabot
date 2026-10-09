@@ -38,7 +38,7 @@ class ChatWorker:
 
     @modal.enter()
     def setup(self):
-        from fantabot.chat import ChatService, OpenAIProvider
+        from fantabot.chat import ChatService, OpenRouterProvider
         from fantabot.config import Settings
         from fantabot.state import State
 
@@ -48,7 +48,7 @@ class ChatWorker:
         settings = Settings.from_env()
         self.state = State("/state/chat.sqlite3", persist=volume.commit)
         self.service = ChatService(
-            self.state, OpenAIProvider(os.environ["OPENAI_API_KEY"], settings), settings
+            self.state, OpenRouterProvider(os.environ["OPENROUTER_API_KEY"], settings), settings
         )
 
     @modal.method()

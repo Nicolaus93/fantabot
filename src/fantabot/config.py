@@ -4,13 +4,15 @@ import os
 from dataclasses import dataclass
 from decimal import Decimal
 
+DEFAULT_MODEL = "qwen/qwen3-30b-a3b-instruct-2507"
+
 
 @dataclass(frozen=True)
 class Settings:
-    model: str = "gpt-4o-mini"
+    model: str = DEFAULT_MODEL
     monthly_budget_eur: Decimal = Decimal("15")
-    input_usd_per_million: Decimal = Decimal("0.15")
-    output_usd_per_million: Decimal = Decimal("0.60")
+    input_usd_per_million: Decimal = Decimal("0.10")
+    output_usd_per_million: Decimal = Decimal("0.30")
     eur_per_usd: Decimal = Decimal("1.10")
     max_output_tokens: int = 512
     cooldown_seconds: int = 15
@@ -34,16 +36,16 @@ class Settings:
 
     @classmethod
     def from_env(cls):
-        model = os.getenv("CHAT_MODEL", "gpt-4o-mini")
-        if model != "gpt-4o-mini" and not all(
+        model = os.getenv("CHAT_MODEL", DEFAULT_MODEL)
+        if model != DEFAULT_MODEL and not all(
             key in os.environ for key in ("INPUT_USD_PER_MILLION", "OUTPUT_USD_PER_MILLION")
         ):
             raise ValueError("Set both token prices when changing CHAT_MODEL")
         return cls(
             model=model,
             monthly_budget_eur=Decimal(os.getenv("MONTHLY_BUDGET_EUR", "15")),
-            input_usd_per_million=Decimal(os.getenv("INPUT_USD_PER_MILLION", "0.15")),
-            output_usd_per_million=Decimal(os.getenv("OUTPUT_USD_PER_MILLION", "0.60")),
+            input_usd_per_million=Decimal(os.getenv("INPUT_USD_PER_MILLION", "0.10")),
+            output_usd_per_million=Decimal(os.getenv("OUTPUT_USD_PER_MILLION", "0.30")),
             eur_per_usd=Decimal(os.getenv("EUR_PER_USD", "1.10")),
             max_output_tokens=int(os.getenv("MAX_OUTPUT_TOKENS", "512")),
             cooldown_seconds=int(os.getenv("COOLDOWN_SECONDS", "15")),

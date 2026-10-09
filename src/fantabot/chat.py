@@ -34,18 +34,34 @@ def bounded_history(messages, settings):
     return messages
 
 
-class OpenAIProvider:
+class OpenRouterProvider:
     def __init__(self, api_key, settings):
         from openai import OpenAI
 
-        self.client = OpenAI(api_key=api_key, max_retries=0, timeout=30)
+        # The OpenAI SDK is only an HTTP client here; inference is via OpenRouter.
+        self.client = OpenAI(
+            api_key=api_key, base_url="https://openrouter.ai/api/v1", max_retries=0, timeout=30
+        )
         self.settings = settings
 
     def complete(self, messages):
         response = self.client.chat.completions.create(
             model=self.settings.model,
             messages=messages,
-            max_completion_tokens=self.settings.max_output_tokens,
+            max_tokens=self.settings.max_output_tokens,
+            extra_body={
+                "provider": {
+                    "sort": "price",
+                    "require_parameters": True,
+                    "allow_fallbacks": False,
+                    # OpenRouter prices are per million tokens here. Fail closed
+                    # instead of silently routing to a more expensive provider.
+                    "max_price": {
+                        "prompt": float(self.settings.input_usd_per_million),
+                        "completion": float(self.settings.output_usd_per_million),
+                    },
+                }
+            },
         )
         text = response.choices[0].message.content
         if not text:
@@ -75,8 +91,8 @@ class ChatService:
         history = bounded_history(self.state.history(conversation, now), self.settings)
         user_message = {"role": "user", "content": text}
         messages = [{"role": "system", "content": SYSTEM_PROMPT}, *history, user_message]
-        # For these text-only OpenAI models, UTF-8 byte count is a conservative
-        # token bound. Add ample message-envelope overhead; no tools/images enabled.
+        # For the default text-only Qwen tokenizer, UTF-8 byte count is a
+        # conservative token bound. Add message-envelope overhead; no tools/images.
         input_bound = sum(len(m["content"].encode()) + 32 for m in messages) + 256
         reserved = cost_units(self.settings, input_bound, self.settings.max_output_tokens)
         refusal = self.state.reserve(request_id, fingerprint, user, reserved, self.settings, now)
