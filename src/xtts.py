@@ -94,7 +94,7 @@ class XTTS:
 
 
 # For local testing, run `modal run -q src.xtts --text "Hello, how are you doing on this fine day?"`
-@app.function(image=tts_image)
+@app.function(image=tts_image, secrets=[modal.Secret.from_name('fantabot-secrets')])
 async def tts_entrypoint(text):
     print("Doing something..")
     tts = XTTS()
@@ -109,6 +109,7 @@ async def tts_entrypoint(text):
 
     from pydub import AudioSegment
     import requests
+    import os
 
     # Load the WAV file
     audio = AudioSegment.from_wav(wav_file)
@@ -117,7 +118,7 @@ async def tts_entrypoint(text):
     ogg_file = "/tmp/output.ogg"
     audio.export(ogg_file, format="ogg")
 
-    TOKEN = "7584218061:AAEwY8oVvPtC6VJ6eE5LNBvtHcA-oPFfecI"
+    TOKEN = os.environ['TELEGRAM_BOT_TOKEN']
     #TELEGRAM_CHAT_ID = 268217449
     TELEGRAM_CHAT_ID = 258851952
 

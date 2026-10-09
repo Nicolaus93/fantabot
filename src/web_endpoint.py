@@ -7,8 +7,6 @@ class Item(BaseModel):
     message: str
 
 
-TOKEN = "7584218061:AAEwY8oVvPtC6VJ6eE5LNBvtHcA-oPFfecI"
-
 image = modal.Image.debian_slim().pip_install([
     "httpx",
     "openai",
@@ -89,11 +87,13 @@ def get_summary(content):
     return completion.choices[0].message.content
 
 
-@app.function(image=image)
+@app.function(image=image, secrets=[modal.Secret.from_name('fantabot-secrets')])
 @modal.web_endpoint(method="POST", docs=True)
 async def send_tg_msg(item: Item):
     import httpx
+    import os
 
+    TOKEN = os.environ['TELEGRAM_BOT_TOKEN']
     api_url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     async with httpx.AsyncClient() as client:
         for summary in get_news.remote_gen():

@@ -1,0 +1,39 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "fantabot"
+version = "0.1.0"
+description = "Budget-conscious Italian fantacalcio chat bot on Telegram and Modal"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "modal>=1.6,<2",
+    "fastapi>=0.115,<1",
+    "httpx>=0.28,<1",
+    "openai>=1.68,<3",
+    "pydantic>=2.10,<3",
+]
+
+[project.optional-dependencies]
+legacy-news = [
+    "feedparser>=6,<7",
+    "playwright==1.42.0",
+    "html2text>=2024.2.26",
+]
+
+[dependency-groups]
+dev = ["pytest>=8,<10", "ruff>=0.11,<1"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fantabot"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
