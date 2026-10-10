@@ -2,6 +2,7 @@
 
 import json
 from decimal import Decimal
+from typing import Any, TypedDict
 
 import httpx
 import openai
@@ -12,11 +13,16 @@ from fantabot.config import DEFAULT_MODEL, Settings
 from fantabot.state import State, month_key
 
 
+class SDKResponse(TypedDict):
+    status: int
+    json: dict[str, Any]
+
+
 @pytest.fixture
 def sdk_transport(monkeypatch):
     requests = []
     client_options = []
-    response = {
+    response: SDKResponse = {
         "status": 200,
         "json": {
             "id": "generation-fake",

@@ -1,3 +1,5 @@
+from typing import Any, TypedDict
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -31,9 +33,16 @@ def telegram_update(text="/ask Chi schiero?", group_id=GROUP_ID):
     }
 
 
+class WorkerCalls(TypedDict):
+    chat: list[tuple[str, ...]]
+    telegram: list[dict[str, Any]]
+    status: str
+    failure: Exception | None
+
+
 @pytest.fixture
 def web_client():
-    calls = {"chat": [], "telegram": [], "status": "ok", "failure": None}
+    calls: WorkerCalls = {"chat": [], "telegram": [], "status": "ok", "failure": None}
 
     async def chat(*args):
         calls["chat"].append(args)

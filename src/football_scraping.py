@@ -172,4 +172,3 @@ def ui():
 def run():
     print("Getting data...")
     main.remote()
-

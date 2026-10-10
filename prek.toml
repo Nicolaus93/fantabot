@@ -1,0 +1,68 @@
+# Native prek configuration: built-ins plus project-locked Python tools.
+minimum_prek_version = "0.5.5"
+default_install_hook_types = ["pre-commit"]
+
+[[repos]]
+repo = "builtin"
+hooks = [
+    { id = "trailing-whitespace" },
+    { id = "end-of-file-fixer" },
+    { id = "mixed-line-ending", args = ["--fix=lf"] },
+    { id = "check-merge-conflict", args = ["--assume-in-merge"] },
+    { id = "check-yaml" },
+    { id = "check-toml" },
+    { id = "check-json" },
+    { id = "check-added-large-files", args = ["--maxkb=500"] },
+    { id = "check-case-conflict" },
+    { id = "check-symlinks" },
+    { id = "detect-private-key" },
+    { id = "deny-filename-pattern", name = "Do not commit local environment secrets", args = ['^\.env(?:\..*)?$'], exclude = '^\.env\.example$' },
+]
+
+[[repos]]
+repo = "local"
+
+[[repos.hooks]]
+id = "ruff-check"
+name = "Ruff lint (auto-fix)"
+entry = "uv run --locked ruff check --fix"
+language = "system"
+files = '^(src/fantabot/|tests/)'
+types = ["python"]
+require_serial = true
+
+[[repos.hooks]]
+id = "ruff-format"
+name = "Ruff format"
+entry = "uv run --locked ruff format"
+language = "system"
+files = '^(src/fantabot/|tests/)'
+types = ["python"]
+require_serial = true
+
+[[repos.hooks]]
+id = "ty"
+name = "ty type checking (package and tests)"
+entry = "uv run --locked ty check --error-on-warning"
+language = "system"
+files = '^(src/fantabot/.*\.py|tests/.*\.py|pyproject\.toml|uv\.lock|prek\.toml)$'
+pass_filenames = false
+require_serial = true
+
+[[repos.hooks]]
+id = "pytest"
+name = "Pytest (offline test suite)"
+entry = "uv run --locked pytest -q"
+language = "system"
+files = '^(src/fantabot/.*\.py|tests/.*\.py|pyproject\.toml|uv\.lock|prek\.toml)$'
+pass_filenames = false
+require_serial = true
+
+[[repos.hooks]]
+id = "uv-lock"
+name = "uv lockfile is current"
+entry = "uv lock --check"
+language = "system"
+files = '^(pyproject\.toml|uv\.lock)$'
+pass_filenames = false
+require_serial = true

@@ -19,6 +19,8 @@ Install [uv](https://docs.astral.sh/uv/getting-started/installation/), then:
 uv sync --locked
 uv run pytest
 uv run ruff check src/fantabot tests
+uv run ty check
+uv run prek install
 ```
 
 Python 3.11+ is required. `pyproject.toml` declares runtime dependencies and the
@@ -28,6 +30,30 @@ Legacy news dependencies are optional: `uv sync --extra legacy-news`.
 The old standalone `scraping.py` experiment (`crawl4ai`) and football/XTTS Modal
 images remain independent and are not installed by the chat project's lockfile.
 The old XTTS deployment keeps its separate, heavyweight Modal image.
+
+## Pre-commit checks (prek)
+
+`prek`, Ruff and `ty` are locked dev dependencies. After `uv sync --locked`, run
+`uv run prek install` once per clone to enable checks on every commit. To check
+the whole repository manually:
+
+```sh
+uv run prek run --all-files
+```
+
+`prek.toml` runs whitespace/end-of-file/line-ending fixes, YAML/TOML/JSON validation,
+merge-marker, large-file, case-conflict, symlink and private-key checks. It also
+blocks `.env` files (except `.env.example`). Ruff automatically fixes lint and
+formats the active package/tests, then `ty` checks them, pytest runs the offline
+suite, and `uv lock --check` verifies dependency changes have an up-to-date lockfile.
+Python tooling is scoped to `src/fantabot/` and `tests/`; standalone legacy scripts
+retain their independent dependencies and receive only the generic hygiene checks.
+Hooks run in order, so formatters complete before type checking/tests.
+
+If a hook changes files, review and re-stage them, then retry the commit. After
+editing dependencies, run `uv lock` and commit both `pyproject.toml` and `uv.lock`.
+The native `repo = "builtin"` hooks need no extra downloaded hook environments;
+Python hooks use the project's locked environment through `uv`.
 
 ## Credentials and configuration
 
