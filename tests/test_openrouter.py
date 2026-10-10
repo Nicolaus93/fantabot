@@ -7,8 +7,9 @@ import httpx
 import openai
 import pytest
 
-from fantabot.chat import OpenRouterProvider
+from fantabot.chat import ChatService, OpenRouterProvider
 from fantabot.config import DEFAULT_MODEL, Settings
+from fantabot.state import State, month_key
 
 
 @pytest.fixture
@@ -71,17 +72,41 @@ def test_sdk_targets_openrouter_and_sends_price_limited_non_reasoning_request(sd
     assert payload["provider"] == {
         "sort": "price",
         "require_parameters": True,
-        "allow_fallbacks": False,
+        "allow_fallbacks": True,
         "max_price": {"prompt": 0.10, "completion": 0.30},
     }
 
 
-def test_openrouter_failure_does_not_retry(sdk_transport):
+@pytest.mark.parametrize("status", [429, 503])
+def test_openrouter_failure_does_not_retry(sdk_transport, status):
     requests, _, response = sdk_transport
-    response.update(status=503, json={"error": {"message": "No provider available"}})
+    response.update(status=status, json={"error": {"message": "No provider available"}})
     with pytest.raises(openai.APIStatusError):
         OpenRouterProvider("fake", Settings()).complete([{"role": "user", "content": "Ciao"}])
     assert len(requests) == 1
+
+
+def test_rate_limit_reply_and_logs_are_useful_without_leaking_details(
+    sdk_transport, tmp_path, caplog
+):
+    requests, _, response = sdk_transport
+    response.update(status=429, json={"error": {"message": "private-provider-detail"}})
+    settings = Settings()
+    state = State(tmp_path / "state.sqlite3")
+    service = ChatService(state, OpenRouterProvider("private-key", settings), settings)
+    now = 1767225600
+    result = service.chat("request", "room", "user", "private-user-message", now=now)
+    assert result["status"] == "error"
+    assert "occupato" in result["text"]
+    event = json.loads(next(r.message for r in caplog.records if r.name == "fantabot.chat"))
+    assert event["error_type"] == "RateLimitError"
+    assert event["http_status"] == 429
+    assert event["message"] == "private-provider-detail"
+    assert "private-key" not in caplog.text
+    assert "private-user-message" not in caplog.text
+    assert len(requests) == 1
+    assert state.spent_eur(month_key(now)) > 0  # Conservative failure reservation is retained.
+    state.db.close()
 
 
 def test_empty_completion_is_not_treated_as_success(sdk_transport):

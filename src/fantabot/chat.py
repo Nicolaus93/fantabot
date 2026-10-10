@@ -2,10 +2,10 @@
 
 import hashlib
 import json
-import logging
 import time
 from decimal import Decimal
 
+from fantabot.observability import log_chat_error
 from fantabot.state import euro_units
 
 SYSTEM_PROMPT = """Sei Fantabot, un amico competente e simpatico in un gruppo italiano di
@@ -53,7 +53,7 @@ class OpenRouterProvider:
                 "provider": {
                     "sort": "price",
                     "require_parameters": True,
-                    "allow_fallbacks": False,
+                    "allow_fallbacks": True,
                     # OpenRouter prices are per million tokens here. Fail closed
                     # instead of silently routing to a more expensive provider.
                     "max_price": {
@@ -109,12 +109,22 @@ class ChatService:
             self.state.finish(request_id, result, actual, conversation, history)
             return result
         except Exception as exc:
-            # Never log provider bodies, user text or tokens. Failed/ambiguous
-            # calls keep the full reservation and are not automatically retried.
-            logging.warning("Chat request failed (%s)", type(exc).__name__)
+            # Failed/ambiguous calls retain their reservation; no client retries.
+            # Emit redacted, actionable summaries, not entire provider bodies.
+            status_code = getattr(exc, "status_code", None)
+            log_chat_error(
+                exc,
+                model=self.settings.model,
+                request_id=request_id,
+                prompt_contents=[message["content"] for message in messages],
+            )
             result = {
                 "status": "error",
-                "text": "Il servizio non è disponibile. Riprova più tardi.",
+                "text": (
+                    "Il modello è momentaneamente occupato. Riprova tra un minuto."
+                    if status_code == 429
+                    else "Il servizio non è disponibile. Riprova più tardi."
+                ),
             }
             self.state.finish(request_id, result)
             return result

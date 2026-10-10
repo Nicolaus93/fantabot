@@ -54,6 +54,17 @@ COOLDOWN_SECONDS=15
 ```
 
 `TELEGRAM_GROUP_ID` is the numeric ID of the single allowed group/supergroup.
+Before registering a webhook, add the bot to your group, send
+`/ask@YourBotUsername hello`, then find the ID with:
+
+```sh
+uv run --env-file .env python -m fantabot.get_group_id
+```
+
+Copy the printed negative ID (including its minus sign) into `.env`. The helper
+reads pending updates only; it does not disable a webhook or consume updates.
+If a webhook is already active, Telegram blocks this method.
+
 `TELEGRAM_BOT_USERNAME` must match BotFather. Generate independent secrets with
 `uv run python -c 'import secrets; print(secrets.token_urlsafe(32))'`.
 Telegram's webhook secret permits only letters, digits, `_` and `-`.
@@ -135,11 +146,14 @@ Treat the chat key as a trusted backend credential, not a browser/public client 
   and `max_tokens`; test compatibility and tokenizer bounds first. Requests cap
   provider input/output prices at the configured rates and require parameter
   support. If no provider fits, the call fails instead of exceeding the price cap.
-  Routing sorts by price and disables provider fallbacks; no automatic retries.
+  Routing sorts by price and allows backup providers within the same price caps
+  when a provider is unavailable or throttled. Client-side automatic retries remain
+  disabled. HTTP 429 produces a temporary-busy reply; structured worker logs record
+  redacted provider summaries, error type, HTTP status and traceback locations.
 - A reservation for the maximum estimated request cost is saved before inference.
   Success conservatively reconciles token usage at the configured price ceilings
   (a cheaper routed provider may actually cost less); failures/uncertain calls retain
-  the reservation. No automatic provider retries. Budget resets by UTC calendar
+  the reservation. No automatic client-side retries. Budget resets by UTC calendar
   month, not by restarting/deploying containers.
 - A single serial Modal worker owns SQLite on the `fantabot-state` volume. Requests
   queue; the web layer scales separately and Telegram work is spawned so webhook
@@ -160,6 +174,30 @@ Treat the chat key as a trusted backend credential, not a browser/public client 
   Markdown. Bot messages, edits, channel posts and other groups are ignored.
 - Football tools, voice, streaming and per-user access controls beyond the allowed
   group are future work. Do not give the model credentials or private data.
+
+## Error logs
+
+Modal captures the worker's stderr. In the dashboard, inspect the `ChatWorker`
+function's logs (not just whether the call succeeded); handled chat errors still
+return a friendly Telegram reply. You can also fetch or follow logs locally:
+
+```sh
+uv run modal app logs fantabot-chat --tail 100 --search chat.request.failed --timestamps
+uv run modal app logs fantabot-chat --follow
+```
+
+Error events are JSON with `event=chat.request.failed`, a hashed `request_ref`,
+model, exception type, HTTP status and the provider's error message. When supplied,
+they include provider name, upstream JSON error message and provider request ID.
+Traceback entries contain file/line/function locations, not local variables or
+source lines. Raw response bodies and non-JSON upstream dumps are omitted.
+Known environment secrets, token patterns, and full current/history prompt text
+are redacted before truncation. This cannot guarantee removal of arbitrary private
+fragments echoed by a provider: keep log access restricted and do not publish logs.
+No Temporal deployment or external log service is required.
+
+After changing the logging code, redeploy using `--strategy recreate`; existing
+log entries cannot retroactively gain the details that were not recorded.
 
 ## Layout
 
