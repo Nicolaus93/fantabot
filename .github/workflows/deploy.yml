@@ -44,7 +44,7 @@ jobs:
         env:
           DEPLOY_BRANCH: ${{ github.ref_name }}
         run: |
-          VERSION=$(uv run --locked --no-dev python -c 'from importlib.metadata import version; print(version("fantabot"))')
+          VERSION=$(uv version --short)
           echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
           {
             echo '## Deployment'
