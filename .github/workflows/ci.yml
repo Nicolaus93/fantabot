@@ -1,0 +1,44 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Tests and prek
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up uv and Python
+        uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
+        with:
+          version: "0.11.14"
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Install locked development dependencies
+        run: uv sync --locked
+
+      - name: Run offline tests
+        run: uv run --locked pytest -q
+
+      - name: Run prek checks
+        if: ${{ !cancelled() }}
+        env:
+          # Tests have their own step above; run all remaining hooks here.
+          SKIP: pytest
+        run: uv run --locked prek run --all-files
