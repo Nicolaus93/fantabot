@@ -224,6 +224,13 @@ used. A fresh login on cache expiry avoids relying on undocumented refresh behav
 Results are cached for 60 seconds per serial worker, failures for 30 seconds.
 Timeouts, denied access, invalid responses and missing credentials produce a safe
 unavailable message without affecting ordinary chat or logging session material.
+Failures emit a JSON warning with `event=fantacalcio.standings.failed`, the
+`stage` (`configuration`, `login`, `calendar`, `status`, `teams`, or `standings`),
+`http_status`, `json_response` (whether the declared content type is JSON), and
+`error_type`. A timeout before headers has a null status; an API rejection may have
+HTTP 200 with `ValueError`. No raw URLs, headers, exception messages or response
+bodies are logged. After a failure, wait at least 30 seconds before retrying to
+get a new diagnostic rather than the cached unavailable reply.
 
 The latest calculated competition round is determined from its calendar and league
 status, rather than hardcoding the current day. With no calculated rounds the bot

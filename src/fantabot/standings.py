@@ -1,5 +1,6 @@
 """Read-only adapter for the Fantacalcio web APIs; no model inference."""
 
+import json
 import logging
 import os
 import time
@@ -13,6 +14,13 @@ COMPETITION = 867709
 # Public application identifier shipped in Fantacalcio's production web client.
 APP_KEY = "ICiELOObd5DF5uJEATi77CRvHiiRuMU0"
 UNAVAILABLE = "Classifica al momento non disponibile. Riprova tra poco."
+REQUEST_STAGES = {
+    "/onboarding/v1/login": "login",
+    f"/onboarding/v1/league/competition/calendar/{COMPETITION}": "calendar",
+    "/onboarding/v1/league/status": "status",
+    "/onboarding/v1/league/competition/teams": "teams",
+    "/servizi/v1_legheCompetizione/classificagiornate": "standings",
+}
 
 
 def _json(response):
@@ -109,20 +117,49 @@ class StandingsService:
         now = time.monotonic()
         if now < self._expires:
             return self._text
+        diagnostics: dict[str, str | int | bool | None] = {
+            "stage": "configuration",
+            "http_status": None,
+            "json_response": None,
+        }
+
+        def track_request(request):
+            diagnostics.update(
+                stage=REQUEST_STAGES.get(request.url.path, "unknown"),
+                http_status=None,
+                json_response=None,
+            )
+
+        def track_response(response):
+            diagnostics.update(
+                http_status=response.status_code,
+                json_response="json" in response.headers.get("content-type", "").lower(),
+            )
+
         try:
             username = os.environ["FANTACALCIO_USERNAME"]
             password = os.environ["FANTACALCIO_PASSWORD"]
             if not username or not password:
                 raise ValueError("Missing Fantacalcio credentials")
             with httpx.Client(
-                timeout=10, headers={"app_key": APP_KEY, "Accept": "application/json"}
+                timeout=10,
+                headers={"app_key": APP_KEY, "Accept": "application/json"},
+                event_hooks={"request": [track_request], "response": [track_response]},
             ) as client:
                 _login(client, username, password)
                 self._text = _standings_text(client)
             self._expires = time.monotonic() + 60
         except Exception as exc:
             # Never log response bodies, credentials, cookies or JWTs.
-            logging.warning("Fantacalcio standings unavailable (%s)", type(exc).__name__)
+            logging.warning(
+                json.dumps(
+                    {
+                        "event": "fantacalcio.standings.failed",
+                        "error_type": type(exc).__name__,
+                        **diagnostics,
+                    }
+                )
+            )
             self._text = UNAVAILABLE
             self._expires = time.monotonic() + 30
         return self._text

@@ -1,5 +1,7 @@
 """Offline fixtures for Fantacalcio's observed web API contracts."""
 
+import json
+
 import httpx
 import pytest
 
@@ -41,7 +43,10 @@ def api(monkeypatch):
     def handle(request):
         requests.append(request)
         headers = {"set-cookie": "session=fake; Domain=.fantacalcio.it; Path=/; Secure"}
-        return httpx.Response(200, json=responses[request.url.path], headers=headers)
+        payload = responses[request.url.path]
+        if isinstance(payload, httpx.Response):
+            return payload
+        return httpx.Response(200, json=payload, headers=headers)
 
     original = httpx.Client
     monkeypatch.setattr(
@@ -143,6 +148,42 @@ def test_upstream_errors_never_escape_to_telegram(api, monkeypatch, mode):
         httpx, "Client", lambda **kw: client_class(transport=httpx.MockTransport(handle), **kw)
     )
     assert standings.StandingsService().reply() == standings.UNAVAILABLE
+
+
+@pytest.mark.parametrize("endpoint,stage_name", list(standings.REQUEST_STAGES.items()))
+def test_http_diagnostics_identify_stage_without_leaking_data(api, caplog, endpoint, stage_name):
+    responses, _ = api
+    responses[endpoint] = httpx.Response(
+        403,
+        text="secret-response-body",
+        headers={"content-type": "text/html", "set-cookie": "secret"},
+    )
+    assert standings.StandingsService().reply() == standings.UNAVAILABLE
+    event = json.loads(caplog.records[-1].message)
+    assert event == {
+        "event": "fantacalcio.standings.failed",
+        "error_type": "HTTPStatusError",
+        "stage": stage_name,
+        "http_status": 403,
+        "json_response": False,
+    }
+    for secret in ("secret-response-body", "dedicated-password", "dedicated-user", "league-jwt"):
+        assert secret not in caplog.text
+
+
+def test_json_rejection_logs_status_and_stage(api, caplog):
+    responses, _ = api
+    responses["/servizi/v1_legheCompetizione/classificagiornate"] = {
+        "success": False,
+        "error_msgs": [{"id": "AD05", "descrizione": "private-details"}],
+    }
+    assert standings.StandingsService().reply() == standings.UNAVAILABLE
+    event = json.loads(caplog.records[-1].message)
+    assert event["stage"] == "standings"
+    assert event["http_status"] == 200
+    assert event["json_response"] is True
+    assert event["error_type"] == "ValueError"
+    assert "private-details" not in caplog.text
 
 
 def test_expired_cache_reauthenticates(api, monkeypatch):
