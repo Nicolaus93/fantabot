@@ -50,6 +50,10 @@ deploy:
 deploy-local:
     version=$(uv version --short) && uv run --locked modal deploy --strategy recreate --tag "v$version" -m fantabot.modal_app
 
+# Test Fantacalcio login locally using exported credentials; prints only safe diagnostics.
+fantacalcio-login-test:
+    uv run --locked python -m fantabot.test_fantacalcio_login
+
 # Show the last 100 handled chat errors.
 logs:
     uv run --locked modal app logs fantabot-chat --tail 100 --search chat.request.failed --timestamps

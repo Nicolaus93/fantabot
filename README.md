@@ -240,6 +240,19 @@ status, rather than hardcoding the current day. With no calculated rounds the bo
 says standings are not available yet. The adapter intentionally supports this one
 competition; other leagues are not selected via user input.
 
+### Local login diagnostic
+
+Export `FANTACALCIO_USERNAME` and `FANTACALCIO_PASSWORD` into your shell environment,
+then run `just fantacalcio-login-test`. The diagnostic does not load or inspect
+`.env`; it makes one login request and does not deploy, send Telegram messages,
+or fetch standings. Avoid putting credentials in command-line arguments/history.
+It prints only HTTP status, allowlisted error codes, response types/known field
+names, and whether a session for the configured league was returned. Unknown
+field names, all response values, cookies and tokens are omitted.
+Exit status 0 means a successful login response included the league session;
+otherwise it exits 1. Share the JSON output to compare local versus Modal login.
+A successful local login does not verify the legacy standings-cookie bridge.
+
 **Validation:** API schemas and the login request contract were inspected, but an
 end-to-end login with the dedicated account still needs a deployment smoke test.
 If Fantacalcio does not issue legacy cookies for that account, or introduces a
