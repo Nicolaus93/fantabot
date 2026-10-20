@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "fantabot"
-version = "0.1.0"
+version = "0.1.1"
 description = "Budget-conscious Italian fantacalcio chat bot on Telegram and Modal"
 readme = "README.md"
 requires-python = ">=3.11"
