@@ -40,10 +40,12 @@ jobs:
         run: uv sync --locked --no-dev
 
       - name: Record deployment version
+        id: version
         env:
           DEPLOY_BRANCH: ${{ github.ref_name }}
         run: |
           VERSION=$(uv run --locked --no-dev python -c 'from importlib.metadata import version; print(version("fantabot"))')
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
           {
             echo '## Deployment'
             printf 'Package version: `%s`\n\n' "$VERSION"
@@ -56,9 +58,10 @@ jobs:
         env:
           MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
           MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+          DEPLOY_TAG: ${{ steps.version.outputs.tag }}
         run: |
           if [ -z "$MODAL_TOKEN_ID" ] || [ -z "$MODAL_TOKEN_SECRET" ]; then
             echo "::error::Add MODAL_TOKEN_ID and MODAL_TOKEN_SECRET to GitHub Actions secrets."
             exit 1
           fi
-          uv run --locked --no-dev modal deploy --strategy recreate -m fantabot.modal_app
+          uv run --locked --no-dev modal deploy --strategy recreate --tag "$DEPLOY_TAG" -m fantabot.modal_app

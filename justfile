@@ -48,7 +48,7 @@ deploy:
 
 # Deploy locally without overlapping SQLite writers. Never run alongside a GitHub deploy.
 deploy-local:
-    uv run --locked modal deploy --strategy recreate -m fantabot.modal_app
+    version=$(uv version --short) && uv run --locked modal deploy --strategy recreate --tag "v$version" -m fantabot.modal_app
 
 # Show the last 100 handled chat errors.
 logs:

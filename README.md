@@ -363,6 +363,10 @@ The workflow needs repository Actions enabled and `contents: write` permission.
 It neither deploys the app nor updates secrets. Tags do not trigger deployment.
 
 Dispatch **deploy** separately for the branch you want to deploy.
+GitHub deployments and `just deploy-local` set Modal's deployment Tag to
+`v<package-version>` (for example, `v0.2.2`). Modal's revision counter and client
+version remain separate from the app version. Re-deploying the same package version
+reuses that label; the GitHub summary's commit SHA distinguishes revisions.
 Each deployment job summary records the package version,
 branch and full commit SHA (`version+SHA`), distinguishing deployments even if
 the package version has not changed. The summary identifies the attempted
