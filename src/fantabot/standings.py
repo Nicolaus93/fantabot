@@ -63,11 +63,19 @@ def _error_codes(response):
     )[:5]
 
 
+class FantacalcioRejected(ValueError):
+    """An API-level failure, containing only safe code identifiers."""
+
+    def __init__(self, error_codes):
+        super().__init__("Fantacalcio rejected request")
+        self.error_codes = error_codes
+
+
 def _json(response):
     response.raise_for_status()
     payload = response.json()
     if isinstance(payload, dict) and payload.get("success") is False:
-        raise ValueError("Fantacalcio rejected request")
+        raise FantacalcioRejected(_error_codes(response))
     return payload
 
 
@@ -205,6 +213,9 @@ class StandingsService:
         except Exception as exc:
             if isinstance(exc, httpx.HTTPStatusError):
                 diagnostics["error_codes"] = _error_codes(exc.response)
+            elif isinstance(exc, FantacalcioRejected):
+                diagnostics["error_codes"] = exc.error_codes
+                diagnostics["reason"] = "api_rejected"
             # Never log response bodies, credentials, cookies or JWTs.
             logging.warning(
                 json.dumps(

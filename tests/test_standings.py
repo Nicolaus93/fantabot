@@ -189,7 +189,9 @@ def test_json_rejection_logs_status_and_stage(api, caplog):
     assert event["stage"] == "standings"
     assert event["http_status"] == 200
     assert event["json_response"] is True
-    assert event["error_type"] == "ValueError"
+    assert event["error_type"] == "FantacalcioRejected"
+    assert event["error_codes"] == ["AD05"]
+    assert event["reason"] == "api_rejected"
     assert "private-details" not in caplog.text
 
 

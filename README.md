@@ -256,6 +256,12 @@ field names, all response values, cookies and tokens are omitted.
 Exit status 0 means a successful login response included the league session;
 otherwise it exits 1. Share the JSON output to compare local versus Modal login.
 A successful local login does not verify the legacy standings-cookie bridge.
+To exercise the complete login → calendar/status → teams → standings path, run
+`just fantacalcio-standings-test` with the same exported credentials. It prints
+only `standings_available` and safe diagnostic warnings, not team data or secrets;
+it never sends Telegram messages or deploys. Every invocation starts a fresh session.
+HTTP-200 API rejections now log `reason=api_rejected` and allowlisted `error_codes`
+(for example, `AD05` indicates missing legacy credentials), not just HTTP errors.
 
 **Validation:** API schemas and the login request contract were inspected, but an
 end-to-end login with the dedicated account still needs a deployment smoke test.

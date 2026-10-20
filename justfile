@@ -54,6 +54,10 @@ deploy-local:
 fantacalcio-login-test:
     uv run --locked python -m fantabot.test_fantacalcio_login
 
+# Test the full Fantacalcio read path with exported credentials; no Telegram or deployment.
+fantacalcio-standings-test:
+    uv run --locked python -m fantabot.test_fantacalcio_standings
+
 # Show the last 100 handled chat errors.
 logs:
     uv run --locked modal app logs fantabot-chat --tail 100 --search chat.request.failed --timestamps
