@@ -1,0 +1,60 @@
+name: release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Publish versioned GitHub Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Check out merged commit
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Read and validate version
+        id: version
+        shell: python
+        run: |
+          import os
+          import re
+          import tomllib
+          from pathlib import Path
+
+          version = tomllib.loads(Path("pyproject.toml").read_text())["project"]["version"]
+          if not re.fullmatch(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", version):
+              raise SystemExit(f"Expected a stable MAJOR.MINOR.PATCH version, got {version!r}")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write(f"tag=v{version}\n")
+
+      - name: Publish release with generated notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          # Existing tags must point to this commit; never move a published tag.
+          if gh api "repos/$GH_REPO/git/ref/tags/$RELEASE_TAG" > /dev/null; then
+            git fetch --no-tags origin "refs/tags/$RELEASE_TAG"
+            if [ "$(git rev-parse 'FETCH_HEAD^{commit}')" != "$GITHUB_SHA" ]; then
+              echo "::error::Tag $RELEASE_TAG already exists for another commit. Bump the version in your PR."
+              exit 1
+            fi
+            if gh release view "$RELEASE_TAG" > /dev/null 2>&1; then
+              echo "Release $RELEASE_TAG already exists for this commit; nothing to do."
+              exit 0
+            fi
+          fi
+          gh release create "$RELEASE_TAG" \
+            --target "$GITHUB_SHA" \
+            --title "$RELEASE_TAG" \
+            --generate-notes
