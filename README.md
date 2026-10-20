@@ -233,6 +233,15 @@ Treat the chat key as a trusted backend credential, not a browser/public client 
 - Football tools, voice, streaming and per-user access controls beyond the allowed
   group are future work. Do not give the model credentials or private data.
 
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on pushes, pull requests and manual dispatches
+using GitHub-hosted Ubuntu runners with Python 3.12. It installs locked development
+dependencies, runs the offline pytest suite, and runs all remaining prek hooks
+(formatting, lint, types and file checks). The pytest hook is skipped in the prek
+step because tests have their own step. CI uses read-only repository permissions
+and no deployment credentials. Superseded runs on the same branch or PR are canceled.
+
 ## Deployment from GitHub
 
 Run `just deploy` to dispatch the workflow for your current Git branch using
