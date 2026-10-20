@@ -31,6 +31,38 @@ The old standalone `scraping.py` experiment (`crawl4ai`) and football/XTTS Modal
 images remain independent and are not installed by the chat project's lockfile.
 The old XTTS deployment keeps its separate, heavyweight Modal image.
 
+## Common commands (just)
+
+Install [just](https://just.systems/man/en/packages.html) separately, then run
+`just` to list the recipes. Python commands use the locked uv environment;
+Telegram helpers load credentials from the local `.env` without passing tokens
+as command-line arguments.
+
+To find another group's ID while the bot already has an active webhook:
+
+```sh
+just webhook-remove
+# Send /ask@YourBotUsername hello in the new group.
+just group-id
+just webhook-set https://YOUR-MODAL-URL
+```
+
+Removal preserves pending updates and temporarily stops Telegram delivery. Keep
+your existing Modal base URL handy and always restore the webhook afterward.
+Registration currently discards queued old updates. Finding a second group ID
+alone does not enable it: this version still allows only one `TELEGRAM_GROUP_ID`.
+
+Other recipes: `just sync`, `just hooks-install`, `just check`, `just test`,
+`just typecheck`, `just secrets-upload`, `just deploy`, `just logs` and
+`just logs-follow`. Deploying does not automatically update secrets or register
+webhooks; these are explicit separate steps.
+
+The removal script can also be run directly:
+
+```sh
+uv run --locked --env-file .env python -m fantabot.remove_webhook
+```
+
 ## Pre-commit checks (prek)
 
 `prek`, Ruff and `ty` are locked dev dependencies. After `uv sync --locked`, run
@@ -200,6 +232,78 @@ Treat the chat key as a trusted backend credential, not a browser/public client 
   Markdown. Bot messages, edits, channel posts and other groups are ignored.
 - Football tools, voice, streaming and per-user access controls beyond the allowed
   group are future work. Do not give the model credentials or private data.
+
+## Deployment from GitHub
+
+Run `just deploy` to dispatch the workflow for your current Git branch using
+[GitHub CLI](https://cli.github.com/) (install it and run `gh auth login` first).
+Push the branch and commits first: GitHub deploys the remote branch, not local
+uncommitted or unpushed changes. Detached HEAD is not supported. This command
+queues the run; follow its status in Actions or with `gh run list --workflow deploy.yml`.
+Use `just deploy-local` only for a direct local Modal deployment, never concurrently
+with a GitHub deployment.
+
+Alternatively, in **Actions → deploy → Run workflow**, select the branch to deploy.
+`.github/workflows/deploy.yml` checks and deploys that branch's selected commit,
+not necessarily `main`. Pushes and pull requests do not deploy automatically.
+GitHub requires the workflow to exist on the default branch before manual dispatch
+is available; the selected branch must also contain the workflow.
+Only dispatch trusted branches: their code runs with deployment credentials.
+Every branch updates the same existing app, not a separate preview app.
+
+One-time setup:
+
+1. Create a Modal API token for the same workspace as your existing bot, through
+   Modal's token settings or `uv run modal token new --no-activate`.
+2. In GitHub **Settings → Secrets and variables → Actions**, add repository secrets
+   named `MODAL_TOKEN_ID` and `MODAL_TOKEN_SECRET` using that token's credentials.
+   Do not commit these values or your `.modal.toml` credentials file.
+3. The workflow targets the Modal environment `main`. If your bot lives in another
+   environment, set the GitHub repository variable `MODAL_ENVIRONMENT` to its name.
+4. Ensure the existing `fantabot-secrets` Modal Secret is present in that workspace
+   and environment. It must contain the Telegram/OpenRouter configuration described
+   above; the workflow does not create or overwrite it from GitHub.
+
+All prek checks (including Ruff, ty and offline tests) must pass before deployment.
+The checks job receives no Modal credentials. Actions are pinned
+by commit SHA, dependencies are installed from `uv.lock`, and deployment runs across
+all branches are serialized rather than canceled halfway through. GitHub may replace
+an older pending run when another is queued; it does not guarantee a FIFO queue. The deploy command uses
+`--strategy recreate` to avoid overlapping SQLite writers; expect a short restart.
+Do not run a manual local deploy concurrently with a GitHub deployment.
+
+The app name, persistent volume and existing Telegram webhook remain unchanged.
+Secrets/configuration changes still require updating the Modal Secret separately;
+a local `.env` is not uploaded by this workflow. Deployment logs are available in
+GitHub Actions; running bot logs remain in Modal.
+
+## Versioning
+
+Use Semantic Versioning (`MAJOR.MINOR.PATCH`), starting at the existing `0.1.0`.
+`pyproject.toml` is the source of truth; `uv.lock` must stay in sync.
+Bump patch for fixes, minor for compatible features, and major for breaking changes.
+During `0.x`, minor releases may introduce breaking changes.
+
+Before releasing, on the branch you intend to deploy:
+
+```sh
+uv version --bump patch  # alternatively: minor or major
+uv run --locked prek run --all-files
+git add pyproject.toml uv.lock
+git commit -m "Release v0.1.1"  # use the actual new version
+git tag -a v0.1.1 -m "Release v0.1.1"
+git push origin HEAD
+git push origin v0.1.1
+```
+
+Then dispatch **deploy** for that branch. Tags mark release commits but do not
+trigger deployments. Version bumps and tags are intentional, not automatic on
+every deployment. Each deployment job summary records the package version,
+branch and full commit SHA (`version+SHA`), distinguishing deployments even if
+the package version has not changed. The summary identifies the attempted
+revision; confirm the deploy step succeeds before treating it as deployed.
+To roll back, create a branch at a known-good release tag and dispatch it.
+Rolling back code does not roll back persistent data or Modal secrets.
 
 ## Error logs
 
