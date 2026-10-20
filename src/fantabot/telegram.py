@@ -12,6 +12,7 @@ class GroupMessage:
     message_id: int
     thread_id: int | None
     text: str
+    command: str = "ask"
 
     @property
     def conversation_id(self):
@@ -24,11 +25,11 @@ def is_int(value):
 
 def _addressed_text(message, bot_username, bot_id):
     text = message["text"].strip()
-    command = re.match(r"^/ask(?:@([A-Za-z0-9_]+))?(?:\s|$)", text, re.IGNORECASE)
+    command = re.match(r"^/(ask|classifica)(?:@([A-Za-z0-9_]+))?(?:\s|$)", text, re.IGNORECASE)
     if command:
-        if command[1] and command[1].lower() != bot_username.lower():
+        if command[2] and command[2].lower() != bot_username.lower():
             return None
-        return text[command.end() :].strip()
+        return command[1].lower(), text[command.end() :].strip()
     if text.startswith("/"):
         return None  # Other slash commands are not ordinary @mentions.
     mention = re.compile(rf"@{re.escape(bot_username)}\b", re.IGNORECASE)
@@ -37,11 +38,11 @@ def _addressed_text(message, bot_username, bot_id):
     replying = isinstance(reply_sender, dict) and reply_sender.get("id") == bot_id
     if not mention.search(text) and not replying:
         return None
-    return mention.sub("", text).strip()
+    return "ask", mention.sub("", text).strip()
 
 
 def addressed_message(update, allowed_chat_id, bot_username, bot_id):
-    """Only /ask, explicit mentions and replies to this bot in the allowed group."""
+    """Only supported commands, mentions and replies in the allowed group."""
     if not isinstance(update, dict) or not is_int(update.get("update_id")):
         return None
     message = update.get("message")
@@ -61,11 +62,12 @@ def addressed_message(update, allowed_chat_id, bot_username, bot_id):
     thread = message.get("message_thread_id")
     if thread is not None and not is_int(thread):
         return None
-    text = _addressed_text(message, bot_username, bot_id)
-    if text is None:
+    addressed = _addressed_text(message, bot_username, bot_id)
+    if addressed is None:
         return None
+    command, text = addressed
     return GroupMessage(
-        update["update_id"], chat["id"], sender["id"], message["message_id"], thread, text
+        update["update_id"], chat["id"], sender["id"], message["message_id"], thread, text, command
     )
 
 

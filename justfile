@@ -48,7 +48,15 @@ deploy:
 
 # Deploy locally without overlapping SQLite writers. Never run alongside a GitHub deploy.
 deploy-local:
-    uv run --locked modal deploy --strategy recreate -m fantabot.modal_app
+    version=$(uv version --short) && uv run --locked modal deploy --strategy recreate --tag "v$version" -m fantabot.modal_app
+
+# Test Fantacalcio login locally using exported credentials; prints only safe diagnostics.
+fantacalcio-login-test:
+    uv run --locked python -m fantabot.test_fantacalcio_login
+
+# Test the full Fantacalcio read path with exported credentials; no Telegram or deployment.
+fantacalcio-standings-test:
+    uv run --locked python -m fantabot.test_fantacalcio_standings
 
 # Show the last 100 handled chat errors.
 logs:

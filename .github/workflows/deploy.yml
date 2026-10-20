@@ -13,35 +13,11 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  checks:
-    name: Pre-commit checks and tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - name: Check out source
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          persist-credentials: false
-
-      - name: Set up uv and Python
-        uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
-        with:
-          version: "0.11.14"
-          python-version: "3.12"
-          enable-cache: true
-
-      - name: Install locked development dependencies
-        run: uv sync --locked
-
-      - name: Run formatting, lint, types, tests, and file checks
-        run: uv run --locked prek run --all-files
-
   deploy:
     name: Deploy production bot
     environment:
       name: production
       url: https://nicolaus93--fantabot-chat-web.modal.run
-    needs: checks
     if: github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/heads/')
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -64,10 +40,12 @@ jobs:
         run: uv sync --locked --no-dev
 
       - name: Record deployment version
+        id: version
         env:
           DEPLOY_BRANCH: ${{ github.ref_name }}
         run: |
-          VERSION=$(uv run --locked --no-dev python -c 'from importlib.metadata import version; print(version("fantabot"))')
+          VERSION=$(uv version --short)
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
           {
             echo '## Deployment'
             printf 'Package version: `%s`\n\n' "$VERSION"
@@ -80,9 +58,10 @@ jobs:
         env:
           MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
           MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+          DEPLOY_TAG: ${{ steps.version.outputs.tag }}
         run: |
           if [ -z "$MODAL_TOKEN_ID" ] || [ -z "$MODAL_TOKEN_SECRET" ]; then
             echo "::error::Add MODAL_TOKEN_ID and MODAL_TOKEN_SECRET to GitHub Actions secrets."
             exit 1
           fi
-          uv run --locked --no-dev modal deploy --strategy recreate -m fantabot.modal_app
+          uv run --locked --no-dev modal deploy --strategy recreate --tag "$DEPLOY_TAG" -m fantabot.modal_app

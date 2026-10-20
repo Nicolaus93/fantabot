@@ -40,12 +40,14 @@ class ChatWorker:
     def setup(self):
         from fantabot.chat import ChatService, OpenRouterProvider
         from fantabot.config import Settings
+        from fantabot.standings import StandingsService
         from fantabot.state import State
 
         # HTTPX INFO request logs include Telegram's token-bearing URL.
         logging.getLogger("httpx").setLevel(logging.WARNING)
         logging.getLogger("httpcore").setLevel(logging.WARNING)
         settings = Settings.from_env()
+        self.standings = StandingsService()
         self.state = State("/state/chat.sqlite3", persist=volume.commit)
         self.service = ChatService(
             self.state, OpenRouterProvider(os.environ["OPENROUTER_API_KEY"], settings), settings
@@ -70,12 +72,15 @@ class ChatWorker:
         )
         if message is None or not self.state.claim_delivery(message.update_id):
             return
-        result = self.service.chat(
-            f"telegram:{message.update_id}",
-            message.conversation_id,
-            f"telegram:{message.user_id}",
-            message.text,
-        )
+        if message.command == "classifica":
+            result = {"text": self.standings.reply()}
+        else:
+            result = self.service.chat(
+                f"telegram:{message.update_id}",
+                message.conversation_id,
+                f"telegram:{message.user_id}",
+                message.text,
+            )
         try:
             with httpx.Client(timeout=15) as client:
                 send_reply(client, token, message, result["text"])

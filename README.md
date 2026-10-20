@@ -190,6 +190,85 @@ its user or text is a conflict. Use a new ID for a new question. `/health` is un
 only liveness. API and Telegram conversation/user IDs occupy separate namespaces.
 Treat the chat key as a trusted backend credential, not a browser/public client key.
 
+## League standings: `/classifica`
+
+Send `/classifica` or `/classifica@YourBotUsername` in the configured Telegram
+group. The bot returns team names (**Squadra**) and league points (**pt**), not
+`pt totali`, for [Fantacalcio a casaccio, competition 867709](https://leghe.fantacalcio.it/fantacalcio-a-casaccio/view/competition/867709/standings).
+The response preserves the site's ranking and replies in the same topic.
+This command does not call the language model or consume the model budget.
+Normal `/ask`, mentions and replies are unchanged.
+
+Create a dedicated Fantacalcio account and have it join that league. Add these
+values to your local ignored `.env`, retaining all existing bot configuration:
+
+```dotenv
+FANTACALCIO_USERNAME=your-dedicated-account-username
+FANTACALCIO_PASSWORD=your-dedicated-account-password
+```
+
+Upload the **complete** `.env` using `just secrets-upload`, which replaces the
+existing `fantabot-secrets` Modal Secret; do not upload a file containing only the
+two new values. Then deploy with `just deploy`. Credentials belong in Modal secrets,
+not GitHub, source code, chat, or command-line arguments. Never copy browser cookies.
+No Telegram webhook change is needed; optionally add `classifica` in BotFather's
+command menu (menu registration is not required for routing).
+
+The adapter uses Fantacalcio's web login and read-only APIs, not a documented
+public integration contract. The production web application's public `app_key`
+is an application identifier, not an account credential. Login uses the dedicated
+username/password; a league JWT accesses team names/calendar, while the login
+cookie jar accesses the legacy standings endpoint. Sessions live only in memory
+and are discarded after each fetch; no browser session or SQLite auth storage is
+used. A fresh login on cache expiry avoids relying on undocumented refresh behavior.
+Results are cached for 60 seconds per serial worker, failures for 30 seconds.
+Timeouts, denied access, invalid responses and missing credentials produce a safe
+unavailable message without affecting ordinary chat or logging session material.
+Failures emit a JSON warning with `event=fantacalcio.standings.failed`, the
+`stage` (`configuration`, `login`, `calendar`, `status`, `teams`, or `standings`),
+`http_status`, `json_response` (whether the declared content type is JSON), and
+`error_type`. A timeout before headers has a null status; an API rejection may have
+HTTP 200 with `ValueError`. HTTP failures also include `error_codes`: up to five
+allowlisted Fantacalcio identifiers (`ATH000`–`ATH099`, `AD00`–`AD99`, `S000`–`S099`)
+from known error fields. An empty list means no recognized code was found, not
+that authentication succeeded. Responses larger than 16 KB are not inspected.
+No raw URLs, headers, exception messages, descriptions or response bodies are logged.
+Both the bot and local diagnostic send the web client's Origin and a browser-compatible
+User-Agent. Synthetic-credential comparisons showed both are needed to reach normal
+login validation (`ATH018`) rather than generic HTTP 403 (`FAIL`). This is not proof
+that real-account login or the legacy cookie bridge succeeds; test those separately. After a failure, wait at least 30 seconds before retrying to
+get a new diagnostic rather than the cached unavailable reply.
+
+The latest calculated competition round is determined from its calendar and league
+status, rather than hardcoding the current day. With no calculated rounds the bot
+says standings are not available yet. The adapter intentionally supports this one
+competition; other leagues are not selected via user input.
+
+### Local login diagnostic
+
+Export `FANTACALCIO_USERNAME` and `FANTACALCIO_PASSWORD` into your shell environment,
+then run `just fantacalcio-login-test`. The diagnostic does not load or inspect
+`.env`; it makes one login request and does not deploy, send Telegram messages,
+or fetch standings. Avoid putting credentials in command-line arguments/history.
+It prints only HTTP status, allowlisted error codes, response types/known field
+names, and whether a session for the configured league was returned. Unknown
+field names, all response values, cookies and tokens are omitted.
+Exit status 0 means a successful login response included the league session;
+otherwise it exits 1. Share the JSON output to compare local versus Modal login.
+A successful local login does not verify the legacy standings-cookie bridge.
+To exercise the complete login → calendar/status → teams → standings path, run
+`just fantacalcio-standings-test` with the same exported credentials. It prints
+only `standings_available` and safe diagnostic warnings, not team data or secrets;
+it never sends Telegram messages or deploys. Every invocation starts a fresh session.
+HTTP-200 API rejections now log `reason=api_rejected` and allowlisted `error_codes`
+(for example, `AD05` indicates missing legacy credentials), not just HTTP errors.
+
+**Validation:** API schemas and the login request contract were inspected, but an
+end-to-end login with the dedicated account still needs a deployment smoke test.
+If Fantacalcio does not issue legacy cookies for that account, or introduces a
+CAPTCHA/MFA challenge or changes its APIs, `/classifica` will report unavailable
+rather than fabricate standings. Do not disable account security to work around it.
+
 ## Budget, persistence and limitations
 
 - A default **€15/month model allowance** leaves a target €5 for Modal. This is
@@ -230,7 +309,7 @@ Treat the chat key as a trusted backend credential, not a browser/public client 
   volume, not intentionally logged; inform group members of this retention.
 - Empty prompts get usage guidance without inference. Replies use plain text, not
   Markdown. Bot messages, edits, channel posts and other groups are ignored.
-- Football tools, voice, streaming and per-user access controls beyond the allowed
+- Football tools beyond `/classifica`, voice, streaming and per-user access controls beyond the allowed
   group are future work. Do not give the model credentials or private data.
 
 ## Continuous integration
@@ -253,7 +332,7 @@ Use `just deploy-local` only for a direct local Modal deployment, never concurre
 with a GitHub deployment.
 
 Alternatively, in **Actions → deploy → Run workflow**, select the branch to deploy.
-`.github/workflows/deploy.yml` checks and deploys that branch's selected commit,
+`.github/workflows/deploy.yml` deploys that branch's selected commit,
 not necessarily `main`. Pushes and pull requests do not deploy automatically.
 GitHub requires the workflow to exist on the default branch before manual dispatch
 is available; the selected branch must also contain the workflow.
@@ -273,8 +352,8 @@ One-time setup:
    and environment. It must contain the Telegram/OpenRouter configuration described
    above; the workflow does not create or overwrite it from GitHub.
 
-All prek checks (including Ruff, ty and offline tests) must pass before deployment.
-The checks job receives no Modal credentials. Actions are pinned
+Deployment does not run or wait for tests or prek checks. These run separately
+in the CI workflow; verify CI succeeds before dispatching deployment. Actions are pinned
 by commit SHA, dependencies are installed from `uv.lock`, and deployment runs across
 all branches are serialized rather than canceled halfway through. GitHub may replace
 an older pending run when another is queued; it does not guarantee a FIFO queue. The deploy command uses
@@ -317,6 +396,10 @@ The workflow needs repository Actions enabled and `contents: write` permission.
 It neither deploys the app nor updates secrets. Tags do not trigger deployment.
 
 Dispatch **deploy** separately for the branch you want to deploy.
+GitHub deployments and `just deploy-local` set Modal's deployment Tag to
+`v<package-version>` (for example, `v0.2.2`). Modal's revision counter and client
+version remain separate from the app version. Re-deploying the same package version
+reuses that label; the GitHub summary's commit SHA distinguishes revisions.
 Each deployment job summary records the package version,
 branch and full commit SHA (`version+SHA`), distinguishing deployments even if
 the package version has not changed. The summary identifies the attempted

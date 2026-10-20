@@ -44,6 +44,20 @@ def test_explicit_addresses_are_routed(text, expected):
     assert message.message_id == 10
 
 
+@pytest.mark.parametrize("text", ["/classifica", "/classifica@Fantabot", "/CLASSIFICA@FANTABOT"])
+def test_standings_command_is_routed_separately(text):
+    message = route(update(text, message_thread_id=2))
+    assert message.command == "classifica"
+    assert message.text == ""
+    assert message.thread_id == 2
+
+
+def test_ask_text_does_not_become_a_standings_command():
+    message = route(update("/ask /classifica"))
+    assert message.command == "ask"
+    assert message.text == "/classifica"
+
+
 def test_reply_to_this_bot_is_routed_without_mention():
     message = route(update("E invece lui?", reply_to_message={"from": {"id": BOT_ID}}))
     assert message.text == "E invece lui?"
@@ -56,6 +70,8 @@ def test_reply_to_this_bot_is_routed_without_mention():
         update("/ask@OtherBot Chi schiero?"),
         update("/start"),
         update("/askmore domanda"),
+        update("/classifica@OtherBot"),
+        update("/classificamore"),
         update("@Fantabot_extra Chi schiero?"),
         update("Risposta", reply_to_message={"from": {"id": BOT_ID + 1}}),
         update(chat={"id": GROUP_ID - 1, "type": "supergroup"}),
