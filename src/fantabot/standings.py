@@ -2,6 +2,7 @@
 
 import json
 import logging
+import math
 import os
 import time
 
@@ -175,7 +176,11 @@ def _format_standings(rows, names):
         team_id, points = row["id"], row["p"]
         if team_id in seen:
             raise StandingsDataError("duplicate_team")
-        if not isinstance(points, int) or isinstance(points, bool):
+        if (
+            not isinstance(points, (int, float))
+            or isinstance(points, bool)
+            or (isinstance(points, float) and not math.isfinite(points))
+        ):
             raise StandingsDataError(
                 "invalid_points_type",
                 points_is_number=isinstance(points, (int, float)) and not isinstance(points, bool),
@@ -183,7 +188,8 @@ def _format_standings(rows, names):
                 points_is_null=points is None,
             )
         seen.add(team_id)
-        lines.append(f"{len(seen)}. {names[team_id]} — {points} pt")
+        display_points = str(points).removesuffix(".0")
+        lines.append(f"{len(seen)}. {names[team_id]} — {display_points} pt")
     text = "\n".join(lines)
     if len(text) > 3900:
         raise StandingsDataError("telegram_text_limit", text_length=len(text))

@@ -281,6 +281,19 @@ def test_validation_diagnostics_contain_only_reason_counts_and_types(
     assert "private-value" not in caplog.text
 
 
+@pytest.mark.parametrize("points,display", [(4.0, "4"), (3.5, "3.5"), (-0.5, "-0.5"), (0.0, "0")])
+def test_float_points_from_real_api_are_supported(api, points, display):
+    responses, _ = api
+    responses["/servizi/v1_legheCompetizione/classificagiornate"]["data"][0]["p"] = points
+    assert f"Calzolai — {display} pt" in standings.StandingsService().reply()
+
+
+@pytest.mark.parametrize("points", [True, None, "4", float("nan"), float("inf"), -float("inf")])
+def test_invalid_or_nonfinite_points_are_rejected(points):
+    with pytest.raises(standings.StandingsDataError, match="invalid_points_type"):
+        standings._format_standings([{"id": 1, "p": points}], {1: "Team"})
+
+
 def test_expired_cache_reauthenticates(api, monkeypatch):
     _, requests = api
     clock = [100.0]
