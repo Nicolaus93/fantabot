@@ -293,21 +293,31 @@ Use Semantic Versioning (`MAJOR.MINOR.PATCH`), starting at the existing `0.1.0`.
 Bump patch for fixes, minor for compatible features, and major for breaking changes.
 During `0.x`, minor releases may introduce breaking changes.
 
-Before releasing, on the branch you intend to deploy:
+Every change, including CI and documentation, needs a dedicated branch and version
+bump (see `AGENTS.md`). On your change branch:
 
 ```sh
 uv version --bump patch  # alternatively: minor or major
 uv run --locked prek run --all-files
 git add pyproject.toml uv.lock
-git commit -m "Release v0.1.1"  # use the actual new version
-git tag -a v0.1.1 -m "Release v0.1.1"
+git commit -m "Describe change and version bump"
 git push origin HEAD
-git push origin v0.1.1
 ```
 
-Then dispatch **deploy** for that branch. Tags mark release commits but do not
-trigger deployments. Version bumps and tags are intentional, not automatic on
-every deployment. Each deployment job summary records the package version,
+Open a PR to `main`. `.github/workflows/release.yml` publishes a GitHub Release
+with generated notes and a `vMAJOR.MINOR.PATCH` tag on each push to `main`, covering
+merge, squash and rebase merges (and direct pushes). The tag targets the exact
+pushed commit. Version bumps happen in PRs, not in the release workflow; an existing
+tag for a different commit fails instead of silently overwriting a release.
+Re-running a successful job for the same commit does not create another release.
+Keep branch protection on `main` to require CI before merging: release publishing
+is independent of CI and does not wait for its post-merge run. If another PR lands
+first, update your version before merging to avoid reusing its tag.
+The workflow needs repository Actions enabled and `contents: write` permission.
+It neither deploys the app nor updates secrets. Tags do not trigger deployment.
+
+Dispatch **deploy** separately for the branch you want to deploy.
+Each deployment job summary records the package version,
 branch and full commit SHA (`version+SHA`), distinguishing deployments even if
 the package version has not changed. The summary identifies the attempted
 revision; confirm the deploy step succeeds before treating it as deployed.
