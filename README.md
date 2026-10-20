@@ -299,7 +299,7 @@ Use `just deploy-local` only for a direct local Modal deployment, never concurre
 with a GitHub deployment.
 
 Alternatively, in **Actions → deploy → Run workflow**, select the branch to deploy.
-`.github/workflows/deploy.yml` checks and deploys that branch's selected commit,
+`.github/workflows/deploy.yml` deploys that branch's selected commit,
 not necessarily `main`. Pushes and pull requests do not deploy automatically.
 GitHub requires the workflow to exist on the default branch before manual dispatch
 is available; the selected branch must also contain the workflow.
@@ -319,8 +319,8 @@ One-time setup:
    and environment. It must contain the Telegram/OpenRouter configuration described
    above; the workflow does not create or overwrite it from GitHub.
 
-All prek checks (including Ruff, ty and offline tests) must pass before deployment.
-The checks job receives no Modal credentials. Actions are pinned
+Deployment does not run or wait for tests or prek checks. These run separately
+in the CI workflow; verify CI succeeds before dispatching deployment. Actions are pinned
 by commit SHA, dependencies are installed from `uv.lock`, and deployment runs across
 all branches are serialized rather than canceled halfway through. GitHub may replace
 an older pending run when another is queued; it does not guarantee a FIFO queue. The deploy command uses
