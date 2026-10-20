@@ -55,8 +55,12 @@ def api(monkeypatch):
     return responses, requests
 
 
-def test_login_and_standings_use_points_not_total_scores(api):
-    _, requests = api
+@pytest.mark.parametrize("league_format", ["object", "array"])
+def test_login_and_standings_use_points_not_total_scores(api, league_format):
+    responses, requests = api
+    if league_format == "array":
+        login = responses["/onboarding/v1/login"]["data"]
+        login["leghe"] = list(login["leghe"].values())
     service = standings.StandingsService()
     assert (
         service.reply() == "Classifica — Squadra · pt\n1. Calzolai — 4 pt\n2. AFC SAROONEY — 3 pt"
@@ -223,6 +227,22 @@ def test_login_error_logs_only_allowlisted_codes(api, caplog):
 )
 def test_error_code_extraction_is_bounded_and_allowlisted(payload, expected):
     assert standings._error_codes(httpx.Response(403, json=payload)) == expected
+
+
+@pytest.mark.parametrize(
+    "leagues",
+    [
+        None,
+        "bad",
+        [],
+        {},
+        [None],
+        [{"alias": "another-league", "jwt": "fake"}],
+        [{"alias": standings.LEAGUE, "jwt": ""}],
+    ],
+)
+def test_invalid_or_missing_membership_has_no_session(leagues):
+    assert standings._league_token({"leghe": leagues}) is None
 
 
 def test_error_code_extraction_handles_non_json():

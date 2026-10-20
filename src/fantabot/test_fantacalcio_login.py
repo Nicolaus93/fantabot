@@ -5,7 +5,7 @@ import os
 
 import httpx
 
-from fantabot.standings import API, LEAGUE, WEB_HEADERS, _error_codes
+from fantabot.standings import API, WEB_HEADERS, _error_codes, _league_token
 
 # Only these literal field names can appear in output; unknown keys may contain PII.
 FIELDS = frozenset(
@@ -89,15 +89,7 @@ def main():
         report["response_structure"] = _structure(payload)
         if isinstance(payload, dict) and payload.get("success") is not False:
             data = payload.get("data", payload)
-            leagues = data.get("leghe", {}) if isinstance(data, dict) else {}
-            if isinstance(leagues, dict):
-                report["league_session_returned"] = any(
-                    isinstance(league, dict)
-                    and league.get("alias") == LEAGUE
-                    and isinstance(league.get("jwt"), str)
-                    and bool(league["jwt"])
-                    for league in leagues.values()
-                )
+            report["league_session_returned"] = _league_token(data) is not None
     print(json.dumps(report, sort_keys=True))
     return 0 if response.is_success and report["league_session_returned"] else 1
 

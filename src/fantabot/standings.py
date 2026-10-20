@@ -71,12 +71,25 @@ def _json(response):
     return payload
 
 
+def _league_token(data):
+    leagues = data.get("leghe", []) if isinstance(data, dict) else []
+    if isinstance(leagues, dict):
+        leagues = leagues.values()
+    elif not isinstance(leagues, list):
+        return None
+    for league in leagues:
+        if isinstance(league, dict) and league.get("alias") == LEAGUE:
+            token = league.get("jwt")
+            if isinstance(token, str) and token:
+                return token
+    return None
+
+
 def _login(client, username, password):
     payload = _json(client.post(f"{API}/login", json={"username": username, "password": password}))
     data = payload.get("data", payload)
-    leagues = data["leghe"]
-    league_jwt = next(league["jwt"] for league in leagues.values() if league["alias"] == LEAGUE)
-    if not isinstance(league_jwt, str) or not league_jwt:
+    league_jwt = _league_token(data)
+    if league_jwt is None:
         raise ValueError("Missing Fantacalcio league session")
     # Login establishes the legacy cookies; keep them only in this client's memory.
     client.headers["Authorization"] = f"Bearer {league_jwt}"

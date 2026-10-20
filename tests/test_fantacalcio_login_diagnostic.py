@@ -4,10 +4,14 @@ import httpx
 import pytest
 
 from fantabot import test_fantacalcio_login as diagnostic
+from fantabot.standings import LEAGUE
 
 
 @pytest.mark.parametrize("status,success", [(200, True), (403, False)])
-def test_diagnostic_reports_structure_without_values(monkeypatch, capsys, status, success):
+@pytest.mark.parametrize("league_format", ["object", "array"])
+def test_diagnostic_reports_structure_without_values(
+    monkeypatch, capsys, status, success, league_format
+):
     monkeypatch.setenv("FANTACALCIO_USERNAME", "private-user")
     monkeypatch.setenv("FANTACALCIO_PASSWORD", "private-password")
     original = httpx.Client
@@ -26,7 +30,11 @@ def test_diagnostic_reports_structure_without_values(monkeypatch, capsys, status
             json={
                 "success": success,
                 "data": {
-                    "leghe": {"private-key": {"alias": diagnostic.LEAGUE, "jwt": "private-jwt"}}
+                    "leghe": (
+                        {"private-key": {"alias": LEAGUE, "jwt": "private-jwt"}}
+                        if league_format == "object"
+                        else [{"alias": LEAGUE, "jwt": "private-jwt"}]
+                    )
                 },
                 "detail": "private-password",
                 "private-user": "private-cookie",
