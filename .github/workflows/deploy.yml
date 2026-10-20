@@ -38,6 +38,9 @@ jobs:
 
   deploy:
     name: Deploy production bot
+    environment:
+      name: production
+      url: https://nicolaus93--fantabot-chat-web.modal.run
     needs: checks
     if: github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/heads/')
     runs-on: ubuntu-latest
