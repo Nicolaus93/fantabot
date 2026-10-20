@@ -63,6 +63,14 @@ def _error_codes(response):
     )[:5]
 
 
+class StandingsDataError(ValueError):
+    """Validation failure with controlled, non-sensitive diagnostics."""
+
+    def __init__(self, reason, **details):
+        super().__init__(reason)
+        self.details = {"reason": reason, **details}
+
+
 class FantacalcioRejected(ValueError):
     """An API-level failure, containing only safe code identifiers."""
 
@@ -148,22 +156,37 @@ def _standings_text(client):
         },
         headers={"Authorization": ""},
     )
-    rows = _json(response)["data"]
+    return _format_standings(_json(response)["data"], names)
+
+
+def _format_standings(rows, names):
     if not isinstance(rows, list) or not rows or len(rows) != len(names):
-        raise ValueError("Incomplete standings")
+        raise StandingsDataError(
+            "incomplete_standings",
+            standings_is_list=isinstance(rows, list),
+            row_count=len(rows) if isinstance(rows, list) else None,
+            team_count=len(names),
+        )
     if all(isinstance(row.get("pos"), int) and row["pos"] > 0 for row in rows):
         rows = sorted(rows, key=lambda row: row["pos"])
     lines = ["Classifica — Squadra · pt"]
     seen = set()
     for row in rows:
         team_id, points = row["id"], row["p"]
-        if team_id in seen or not isinstance(points, int) or isinstance(points, bool):
-            raise ValueError("Invalid standings")
+        if team_id in seen:
+            raise StandingsDataError("duplicate_team")
+        if not isinstance(points, int) or isinstance(points, bool):
+            raise StandingsDataError(
+                "invalid_points_type",
+                points_is_number=isinstance(points, (int, float)) and not isinstance(points, bool),
+                points_is_string=isinstance(points, str),
+                points_is_null=points is None,
+            )
         seen.add(team_id)
         lines.append(f"{len(seen)}. {names[team_id]} — {points} pt")
     text = "\n".join(lines)
     if len(text) > 3900:
-        raise ValueError("Standings exceed Telegram text limit")
+        raise StandingsDataError("telegram_text_limit", text_length=len(text))
     return text
 
 
@@ -216,6 +239,8 @@ class StandingsService:
             elif isinstance(exc, FantacalcioRejected):
                 diagnostics["error_codes"] = exc.error_codes
                 diagnostics["reason"] = "api_rejected"
+            elif isinstance(exc, StandingsDataError):
+                diagnostics.update(exc.details)
             # Never log response bodies, credentials, cookies or JWTs.
             logging.warning(
                 json.dumps(

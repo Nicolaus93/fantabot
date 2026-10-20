@@ -251,6 +251,36 @@ def test_error_code_extraction_handles_non_json():
     assert standings._error_codes(httpx.Response(403, text="private-html")) == []
 
 
+@pytest.mark.parametrize(
+    "rows,reason,details",
+    [
+        ([], "incomplete_standings", {"row_count": 0, "team_count": 2, "standings_is_list": True}),
+        (
+            {},
+            "incomplete_standings",
+            {"row_count": None, "team_count": 2, "standings_is_list": False},
+        ),
+        (
+            [{"id": 1, "p": "private-value"}, {"id": 2, "p": 3}],
+            "invalid_points_type",
+            {"points_is_string": True},
+        ),
+        ([{"id": 1, "p": 4}, {"id": 1, "p": 3}], "duplicate_team", {}),
+    ],
+)
+def test_validation_diagnostics_contain_only_reason_counts_and_types(
+    api, caplog, rows, reason, details
+):
+    responses, _ = api
+    responses["/servizi/v1_legheCompetizione/classificagiornate"]["data"] = rows
+    assert standings.StandingsService().reply() == standings.UNAVAILABLE
+    event = json.loads(caplog.records[-1].message)
+    assert event["reason"] == reason
+    for key, value in details.items():
+        assert event[key] == value
+    assert "private-value" not in caplog.text
+
+
 def test_expired_cache_reauthenticates(api, monkeypatch):
     _, requests = api
     clock = [100.0]
