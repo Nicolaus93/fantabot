@@ -62,6 +62,8 @@ def test_login_and_standings_use_points_not_total_scores(api):
         service.reply() == "Classifica — Squadra · pt\n1. Calzolai — 4 pt\n2. AFC SAROONEY — 3 pt"
     )
     assert requests[0].method == "POST"
+    assert requests[0].headers["Origin"] == "https://leghe.fantacalcio.it"
+    assert requests[0].headers["User-Agent"] == standings.WEB_HEADERS["User-Agent"]
     assert b'"password":"dedicated-password"' in requests[0].content
     assert requests[1].headers["Authorization"] == "Bearer league-jwt"
     legacy = requests[-1]

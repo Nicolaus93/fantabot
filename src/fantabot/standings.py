@@ -13,6 +13,16 @@ LEAGUE = "fantacalcio-a-casaccio"
 COMPETITION = 867709
 # Public application identifier shipped in Fantacalcio's production web client.
 APP_KEY = "ICiELOObd5DF5uJEATi77CRvHiiRuMU0"
+# The web login rejects HTTPX's default identity or requests without this Origin.
+WEB_HEADERS = {
+    "app_key": APP_KEY,
+    "Accept": "application/json",
+    "Origin": "https://leghe.fantacalcio.it",
+    "User-Agent": (
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+    ),
+}
 UNAVAILABLE = "Classifica al momento non disponibile. Riprova tra poco."
 REQUEST_STAGES = {
     "/onboarding/v1/login": "login",
@@ -173,7 +183,7 @@ class StandingsService:
                 raise ValueError("Missing Fantacalcio credentials")
             with httpx.Client(
                 timeout=10,
-                headers={"app_key": APP_KEY, "Accept": "application/json"},
+                headers=WEB_HEADERS,
                 event_hooks={"request": [track_request], "response": [track_response]},
             ) as client:
                 _login(client, username, password)

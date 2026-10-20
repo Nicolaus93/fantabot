@@ -232,7 +232,11 @@ HTTP 200 with `ValueError`. HTTP failures also include `error_codes`: up to five
 allowlisted Fantacalcio identifiers (`ATH000`–`ATH099`, `AD00`–`AD99`, `S000`–`S099`)
 from known error fields. An empty list means no recognized code was found, not
 that authentication succeeded. Responses larger than 16 KB are not inspected.
-No raw URLs, headers, exception messages, descriptions or response bodies are logged. After a failure, wait at least 30 seconds before retrying to
+No raw URLs, headers, exception messages, descriptions or response bodies are logged.
+Both the bot and local diagnostic send the web client's Origin and a browser-compatible
+User-Agent. Synthetic-credential comparisons showed both are needed to reach normal
+login validation (`ATH018`) rather than generic HTTP 403 (`FAIL`). This is not proof
+that real-account login or the legacy cookie bridge succeeds; test those separately. After a failure, wait at least 30 seconds before retrying to
 get a new diagnostic rather than the cached unavailable reply.
 
 The latest calculated competition round is determined from its calendar and league

@@ -5,7 +5,7 @@ import os
 
 import httpx
 
-from fantabot.standings import API, APP_KEY, LEAGUE, _error_codes
+from fantabot.standings import API, LEAGUE, WEB_HEADERS, _error_codes
 
 # Only these literal field names can appear in output; unknown keys may contain PII.
 FIELDS = frozenset(
@@ -67,9 +67,7 @@ def main():
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
     try:
-        with httpx.Client(
-            timeout=10, headers={"app_key": APP_KEY, "Accept": "application/json"}
-        ) as client:
+        with httpx.Client(timeout=10, headers=WEB_HEADERS) as client:
             response = client.post(
                 f"{API}/login", json={"username": username, "password": password}
             )

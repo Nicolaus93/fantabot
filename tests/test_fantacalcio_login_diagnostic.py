@@ -15,6 +15,8 @@ def test_diagnostic_reports_structure_without_values(monkeypatch, capsys, status
 
     def handle(request):
         calls.append(request)
+        assert request.headers["Origin"] == "https://leghe.fantacalcio.it"
+        assert request.headers["User-Agent"] == diagnostic.WEB_HEADERS["User-Agent"]
         assert json.loads(request.content) == {
             "username": "private-user",
             "password": "private-password",
