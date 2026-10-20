@@ -166,6 +166,7 @@ def test_http_diagnostics_identify_stage_without_leaking_data(api, caplog, endpo
         "stage": stage_name,
         "http_status": 403,
         "json_response": False,
+        "error_codes": [],
     }
     for secret in ("secret-response-body", "dedicated-password", "dedicated-user", "league-jwt"):
         assert secret not in caplog.text
@@ -184,6 +185,46 @@ def test_json_rejection_logs_status_and_stage(api, caplog):
     assert event["json_response"] is True
     assert event["error_type"] == "ValueError"
     assert "private-details" not in caplog.text
+
+
+def test_login_error_logs_only_allowlisted_codes(api, caplog):
+    responses, _ = api
+    responses["/onboarding/v1/login"] = httpx.Response(
+        403,
+        json={
+            "code": "ATH003",
+            "error_msgs": [{"id": "AD05", "descrizione": "private-response"}],
+            "error": {"code": "dedicated-password", "message": "secret-token"},
+            "token": "secret-token",
+        },
+    )
+    assert standings.StandingsService().reply() == standings.UNAVAILABLE
+    event = json.loads(caplog.records[-1].message)
+    assert event["stage"] == "login"
+    assert event["http_status"] == 403
+    assert event["error_codes"] == ["AD05", "ATH003"]
+    for private in ("private-response", "secret-token", "dedicated-password"):
+        assert private not in caplog.text
+
+
+@pytest.mark.parametrize(
+    "payload,expected",
+    [
+        ({"errorCode": "S013"}, ["S013"]),
+        ({"error_code": "ATH015"}, ["ATH015"]),
+        ({"code": "username@example.com"}, []),
+        ({"error_msgs": [{"id": "unknown-secret"}, None, {"id": []}]}, []),
+        ({"data": {"code": "ATH003"}, "message": "ATH003"}, []),
+        ([{"code": "ATH003"}], []),
+        ({"code": "ATH003", "padding": "x" * 16384}, []),
+    ],
+)
+def test_error_code_extraction_is_bounded_and_allowlisted(payload, expected):
+    assert standings._error_codes(httpx.Response(403, json=payload)) == expected
+
+
+def test_error_code_extraction_handles_non_json():
+    assert standings._error_codes(httpx.Response(403, text="private-html")) == []
 
 
 def test_expired_cache_reauthenticates(api, monkeypatch):

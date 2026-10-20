@@ -228,8 +228,11 @@ Failures emit a JSON warning with `event=fantacalcio.standings.failed`, the
 `stage` (`configuration`, `login`, `calendar`, `status`, `teams`, or `standings`),
 `http_status`, `json_response` (whether the declared content type is JSON), and
 `error_type`. A timeout before headers has a null status; an API rejection may have
-HTTP 200 with `ValueError`. No raw URLs, headers, exception messages or response
-bodies are logged. After a failure, wait at least 30 seconds before retrying to
+HTTP 200 with `ValueError`. HTTP failures also include `error_codes`: up to five
+allowlisted Fantacalcio identifiers (`ATH000`–`ATH099`, `AD00`–`AD99`, `S000`–`S099`)
+from known error fields. An empty list means no recognized code was found, not
+that authentication succeeded. Responses larger than 16 KB are not inspected.
+No raw URLs, headers, exception messages, descriptions or response bodies are logged. After a failure, wait at least 30 seconds before retrying to
 get a new diagnostic rather than the cached unavailable reply.
 
 The latest calculated competition round is determined from its calendar and league

@@ -23,6 +23,36 @@ REQUEST_STAGES = {
 }
 
 
+# Only code-shaped identifiers are allowed out of an authentication response.
+SAFE_ERROR_CODES = frozenset(
+    [f"ATH{i:03}" for i in range(100)]
+    + [f"AD{i:02}" for i in range(100)]
+    + [f"S{i:03}" for i in range(100)]
+)
+
+
+def _error_codes(response):
+    """Extract bounded, allowlisted identifiers, never descriptions or user data."""
+    if len(response.content) > 16384:
+        return []
+    try:
+        payload = response.json()
+    except ValueError:
+        return []
+    if not isinstance(payload, dict):
+        return []
+    candidates = [payload.get("code"), payload.get("errorCode"), payload.get("error_code")]
+    error = payload.get("error")
+    if isinstance(error, dict):
+        candidates.append(error.get("code"))
+    errors = payload.get("error_msgs")
+    if isinstance(errors, list):
+        candidates.extend(item.get("id") for item in errors[:20] if isinstance(item, dict))
+    return sorted(
+        {code for code in candidates if isinstance(code, str) and code in SAFE_ERROR_CODES}
+    )[:5]
+
+
 def _json(response):
     response.raise_for_status()
     payload = response.json()
@@ -117,7 +147,7 @@ class StandingsService:
         now = time.monotonic()
         if now < self._expires:
             return self._text
-        diagnostics: dict[str, str | int | bool | None] = {
+        diagnostics: dict[str, str | int | bool | list[str] | None] = {
             "stage": "configuration",
             "http_status": None,
             "json_response": None,
@@ -150,6 +180,8 @@ class StandingsService:
                 self._text = _standings_text(client)
             self._expires = time.monotonic() + 60
         except Exception as exc:
+            if isinstance(exc, httpx.HTTPStatusError):
+                diagnostics["error_codes"] = _error_codes(exc.response)
             # Never log response bodies, credentials, cookies or JWTs.
             logging.warning(
                 json.dumps(
