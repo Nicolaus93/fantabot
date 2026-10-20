@@ -190,6 +190,52 @@ its user or text is a conflict. Use a new ID for a new question. `/health` is un
 only liveness. API and Telegram conversation/user IDs occupy separate namespaces.
 Treat the chat key as a trusted backend credential, not a browser/public client key.
 
+## League standings: `/classifica`
+
+Send `/classifica` or `/classifica@YourBotUsername` in the configured Telegram
+group. The bot returns team names (**Squadra**) and league points (**pt**), not
+`pt totali`, for [Fantacalcio a casaccio, competition 867709](https://leghe.fantacalcio.it/fantacalcio-a-casaccio/view/competition/867709/standings).
+The response preserves the site's ranking and replies in the same topic.
+This command does not call the language model or consume the model budget.
+Normal `/ask`, mentions and replies are unchanged.
+
+Create a dedicated Fantacalcio account and have it join that league. Add these
+values to your local ignored `.env`, retaining all existing bot configuration:
+
+```dotenv
+FANTACALCIO_USERNAME=your-dedicated-account-username
+FANTACALCIO_PASSWORD=your-dedicated-account-password
+```
+
+Upload the **complete** `.env` using `just secrets-upload`, which replaces the
+existing `fantabot-secrets` Modal Secret; do not upload a file containing only the
+two new values. Then deploy with `just deploy`. Credentials belong in Modal secrets,
+not GitHub, source code, chat, or command-line arguments. Never copy browser cookies.
+No Telegram webhook change is needed; optionally add `classifica` in BotFather's
+command menu (menu registration is not required for routing).
+
+The adapter uses Fantacalcio's web login and read-only APIs, not a documented
+public integration contract. The production web application's public `app_key`
+is an application identifier, not an account credential. Login uses the dedicated
+username/password; a league JWT accesses team names/calendar, while the login
+cookie jar accesses the legacy standings endpoint. Sessions live only in memory
+and are discarded after each fetch; no browser session or SQLite auth storage is
+used. A fresh login on cache expiry avoids relying on undocumented refresh behavior.
+Results are cached for 60 seconds per serial worker, failures for 30 seconds.
+Timeouts, denied access, invalid responses and missing credentials produce a safe
+unavailable message without affecting ordinary chat or logging session material.
+
+The latest calculated competition round is determined from its calendar and league
+status, rather than hardcoding the current day. With no calculated rounds the bot
+says standings are not available yet. The adapter intentionally supports this one
+competition; other leagues are not selected via user input.
+
+**Validation:** API schemas and the login request contract were inspected, but an
+end-to-end login with the dedicated account still needs a deployment smoke test.
+If Fantacalcio does not issue legacy cookies for that account, or introduces a
+CAPTCHA/MFA challenge or changes its APIs, `/classifica` will report unavailable
+rather than fabricate standings. Do not disable account security to work around it.
+
 ## Budget, persistence and limitations
 
 - A default **€15/month model allowance** leaves a target €5 for Modal. This is
@@ -230,7 +276,7 @@ Treat the chat key as a trusted backend credential, not a browser/public client 
   volume, not intentionally logged; inform group members of this retention.
 - Empty prompts get usage guidance without inference. Replies use plain text, not
   Markdown. Bot messages, edits, channel posts and other groups are ignored.
-- Football tools, voice, streaming and per-user access controls beyond the allowed
+- Football tools beyond `/classifica`, voice, streaming and per-user access controls beyond the allowed
   group are future work. Do not give the model credentials or private data.
 
 ## Continuous integration

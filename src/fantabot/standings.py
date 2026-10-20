@@ -1,0 +1,128 @@
+"""Read-only adapter for the Fantacalcio web APIs; no model inference."""
+
+import logging
+import os
+import time
+
+import httpx
+
+API = "https://apileague.fantacalcio.it/onboarding/v1"
+LEGACY = "https://leghe.fantacalcio.it/servizi/v1_legheCompetizione/classificagiornate"
+LEAGUE = "fantacalcio-a-casaccio"
+COMPETITION = 867709
+# Public application identifier shipped in Fantacalcio's production web client.
+APP_KEY = "ICiELOObd5DF5uJEATi77CRvHiiRuMU0"
+UNAVAILABLE = "Classifica al momento non disponibile. Riprova tra poco."
+
+
+def _json(response):
+    response.raise_for_status()
+    payload = response.json()
+    if isinstance(payload, dict) and payload.get("success") is False:
+        raise ValueError("Fantacalcio rejected request")
+    return payload
+
+
+def _login(client, username, password):
+    payload = _json(client.post(f"{API}/login", json={"username": username, "password": password}))
+    data = payload.get("data", payload)
+    leagues = data["leghe"]
+    league_jwt = next(league["jwt"] for league in leagues.values() if league["alias"] == LEAGUE)
+    if not isinstance(league_jwt, str) or not league_jwt:
+        raise ValueError("Missing Fantacalcio league session")
+    # Login establishes the legacy cookies; keep them only in this client's memory.
+    client.headers["Authorization"] = f"Bearer {league_jwt}"
+
+
+def _team_names(client):
+    names = {}
+    for page in range(1, 6):
+        payload = _json(
+            client.get(
+                f"{API}/league/competition/teams",
+                params={
+                    "page": page,
+                    "pageSize": 50,
+                    "competitionId": COMPETITION,
+                },
+            )
+        )
+        for team in payload["data"]:
+            name = team["n"]
+            if not isinstance(name, str) or not name.strip() or len(name) > 200:
+                raise ValueError("Invalid team name")
+            names[team["id"]] = " ".join(name.split())
+        if not payload.get("nextPage"):
+            return names
+    raise ValueError("Too many teams")
+
+
+def _standings_text(client):
+    calendar = _json(client.get(f"{API}/league/competition/calendar/{COMPETITION}"))
+    status = _json(client.get(f"{API}/league/status"))
+    calculated = [
+        round_["matchDay"]
+        for round_ in calendar
+        if round_.get("calculated") is True and round_["championshipMatchDay"] <= status["mday"]
+    ]
+    if not calculated:
+        return "Classifica non ancora disponibile: nessuna giornata calcolata."
+    names = _team_names(client)
+    # Legacy requests use cookies, not the league Bearer token.
+    response = client.get(
+        LEGACY,
+        params={
+            "alias_lega": LEAGUE,
+            "id_competizione": COMPETITION,
+            "giornata_inizio": 1,
+            "giornata_fine": max(calculated),
+        },
+        headers={"Authorization": ""},
+    )
+    rows = _json(response)["data"]
+    if not isinstance(rows, list) or not rows or len(rows) != len(names):
+        raise ValueError("Incomplete standings")
+    if all(isinstance(row.get("pos"), int) and row["pos"] > 0 for row in rows):
+        rows = sorted(rows, key=lambda row: row["pos"])
+    lines = ["Classifica — Squadra · pt"]
+    seen = set()
+    for row in rows:
+        team_id, points = row["id"], row["p"]
+        if team_id in seen or not isinstance(points, int) or isinstance(points, bool):
+            raise ValueError("Invalid standings")
+        seen.add(team_id)
+        lines.append(f"{len(seen)}. {names[team_id]} — {points} pt")
+    text = "\n".join(lines)
+    if len(text) > 3900:
+        raise ValueError("Standings exceed Telegram text limit")
+    return text
+
+
+class StandingsService:
+    """Serial-worker cache avoids logging in for each repeated command."""
+
+    def __init__(self):
+        self._text = UNAVAILABLE
+        self._expires = 0.0
+
+    def reply(self):
+        now = time.monotonic()
+        if now < self._expires:
+            return self._text
+        try:
+            username = os.environ["FANTACALCIO_USERNAME"]
+            password = os.environ["FANTACALCIO_PASSWORD"]
+            if not username or not password:
+                raise ValueError("Missing Fantacalcio credentials")
+            with httpx.Client(
+                timeout=10, headers={"app_key": APP_KEY, "Accept": "application/json"}
+            ) as client:
+                _login(client, username, password)
+                self._text = _standings_text(client)
+            self._expires = time.monotonic() + 60
+        except Exception as exc:
+            # Never log response bodies, credentials, cookies or JWTs.
+            logging.warning("Fantacalcio standings unavailable (%s)", type(exc).__name__)
+            self._text = UNAVAILABLE
+            self._expires = time.monotonic() + 30
+        return self._text

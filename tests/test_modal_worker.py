@@ -2,8 +2,9 @@
 
 import httpx
 import pytest
+from fastapi.testclient import TestClient
 
-from fantabot import chat, modal_app, state
+from fantabot import chat, modal_app, standings, state
 
 
 @pytest.fixture
@@ -60,8 +61,6 @@ def update(update_id=1, chat_id=-100):
 
 
 def test_local_web_factory_initializes_with_configured_secrets(local_worker):
-    from fastapi.testclient import TestClient
-
     app = modal_app.web.local()
     with TestClient(app) as client:
         assert client.get("/health").json() == {"status": "ok"}
@@ -82,6 +81,44 @@ def test_duplicate_telegram_jobs_send_and_bill_only_once(local_worker):
     worker.telegram.local(update())
     assert len(calls) == 1
     assert len(deliveries) == 1
+
+
+def test_standings_bypasses_model_and_deduplicates_delivery(local_worker, monkeypatch):
+    import json
+
+    worker, calls, deliveries = local_worker
+    fetches = []
+
+    def reply(self):
+        fetches.append(True)
+        return "Classifica\nCalzolai — 4 pt"
+
+    monkeypatch.setattr(standings.StandingsService, "reply", reply)
+    payload = update()
+    payload["message"]["text"] = "/classifica@FantaBot"
+    payload["message"]["message_thread_id"] = 8
+    worker.telegram.local(payload)
+    worker.telegram.local(payload)
+    assert calls == []
+    assert fetches == [True]
+    assert len(deliveries) == 1
+    sent = json.loads(deliveries[0].content)
+    assert sent["text"] == "Classifica\nCalzolai — 4 pt"
+    assert sent["message_thread_id"] == 8
+
+
+def test_standings_checks_group_before_fetching(local_worker, monkeypatch):
+    worker, calls, deliveries = local_worker
+
+    def unexpected_fetch(self):
+        pytest.fail("Disallowed group must not fetch standings")
+
+    monkeypatch.setattr(standings.StandingsService, "reply", unexpected_fetch)
+    payload = update(chat_id=-999)
+    payload["message"]["text"] = "/classifica"
+    worker.telegram.local(payload)
+    assert calls == []
+    assert deliveries == []
 
 
 def test_worker_checks_group_even_if_called_without_web_layer(local_worker):
